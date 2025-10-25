@@ -274,9 +274,20 @@ WHERE n.id_cliente IS NULL
 
 ## Observações Adicionais
 
-- **Compatibilidade**: A query otimizada usa CTEs (WITH), disponível no MySQL 8.0+
+- **Compatibilidade**: A query otimizada acima usa CTEs (WITH), disponível no MySQL 8.0+
+- **MySQL 5.7 ou anterior**: Veja o arquivo `mysql_query_FINAL.sql` para a versão sem CTEs
 - **Materialização**: O MySQL pode materializar CTEs; teste o parâmetro `optimizer_switch` se necessário
 - **Manutenção**: A query otimizada é mais fácil de manter e estender
 - **Debug**: Para debugar, você pode executar cada CTE individualmente
+
+---
+
+## Versão para MySQL 5.7 (SEM CTEs)
+
+Se você estiver usando MySQL 5.7 ou anterior, use a query no arquivo `mysql_query_FINAL.sql`.
+Ela usa subqueries derivadas em vez de CTEs, mas mantém as mesmas otimizações:
+- Zero subconsultas correlacionadas
+- Mínimo de scans da tabela
+- Mesma performance da versão com CTEs
 
 Se tiver dúvidas ou precisar de ajustes, é só avisar!
