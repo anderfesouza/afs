@@ -4,7 +4,21 @@ Você tem **29.431 registros** e **5.560 contratos** no resultado.
 
 ---
 
-## ⚡ RECOMENDAÇÃO: Use Esta!
+## 🆕 NOVIDADE: Versão COM Filtros de Status!
+
+**Arquivo**: `mysql_query_FASTEST_FILTROS.sql` ⭐⭐⭐
+
+### Por quê usar?
+- ✅ **Filtra por Status**: Atraso, Aberto, Ativo, Quitado
+- ✅ **Múltiplos filtros**: `'Atraso,Aberto'`
+- ✅ **Mais rápida**: Menos dados = menos fetching
+- ✅ **Fácil de usar**: `CALL procedure('Atraso');`
+
+**Veja o guia completo**: `COMO_USAR_FILTROS.md`
+
+---
+
+## ⚡ Versão SEM Filtros (Atual em Produção)
 
 **Arquivo**: `mysql_query_FASTEST.sql`
 

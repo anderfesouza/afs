@@ -1,28 +1,57 @@
 -- ============================================================
--- STORED PROCEDURE: afs_receitas_consolidadas
+-- STORED PROCEDURE: afs_receitas_consolidadas_filtrada
 -- ============================================================
--- Versão atual em produção (sem filtros)
--- Para 29.431 registros → 5.560 contratos
--- Tempo esperado: 2-5 segundos
--- ============================================================
-
--- USO:
--- CALL dagiel67_central_mdzd.afs_receitas_consolidadas();
-
+-- Versão COM FILTROS de Status
+-- Permite filtrar por: Atraso, Ativo, Aberto, Quitado
 -- ============================================================
 
-CREATE DEFINER=`dagiel67_central_mdzd1`@`%` PROCEDURE `afs_receitas_consolidadas`()
+-- EXEMPLOS DE USO:
+--
+-- 1. Todos os registros (igual à versão sem filtros):
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada(NULL);
+--
+-- 2. Filtrar apenas Status "Atraso":
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso');
+--
+-- 3. Filtrar apenas Status "Aberto":
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Aberto');
+--
+-- 4. Filtrar múltiplos Status (Atraso OU Aberto):
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso,Aberto');
+--
+-- 5. Filtrar Ativo e Quitado:
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Ativo,Quitado');
+--
+-- ============================================================
+
+DROP PROCEDURE IF EXISTS dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada;
+
+DELIMITER $$
+
+CREATE DEFINER=`dagiel67_central_mdzd1`@`%` PROCEDURE `afs_receitas_consolidadas_filtrada`(
+  IN p_filtro_status VARCHAR(500)  -- Valores: NULL (todos), 'Atraso', 'Aberto', 'Ativo', 'Quitado' ou combinações: 'Atraso,Aberto'
+)
 BEGIN
--- ============================================================
--- QUERY MAIS RÁPIDA POSSÍVEL - SEM SUBCONSULTAS CORRELACIONADAS
--- ============================================================
--- Para 29.431 registros → 5.560 contratos
--- Tempo esperado: 2-5 segundos
--- ============================================================
+
+-- Variáveis para os filtros
+DECLARE v_filtrar_atraso BOOLEAN DEFAULT FALSE;
+DECLARE v_filtrar_aberto BOOLEAN DEFAULT FALSE;
+DECLARE v_filtrar_ativo BOOLEAN DEFAULT FALSE;
+DECLARE v_filtrar_quitado BOOLEAN DEFAULT FALSE;
+DECLARE v_usar_filtro BOOLEAN DEFAULT FALSE;
 
 -- CONFIGURAÇÃO
 SET SESSION tmp_table_size = 256*1024*1024;
 SET SESSION max_heap_table_size = 256*1024*1024;
+
+-- Processar o parâmetro de filtro
+IF p_filtro_status IS NOT NULL AND p_filtro_status <> '' THEN
+  SET v_usar_filtro = TRUE;
+  SET v_filtrar_atraso = (FIND_IN_SET('Atraso', p_filtro_status) > 0);
+  SET v_filtrar_aberto = (FIND_IN_SET('Aberto', p_filtro_status) > 0);
+  SET v_filtrar_ativo = (FIND_IN_SET('Ativo', p_filtro_status) > 0);
+  SET v_filtrar_quitado = (FIND_IN_SET('Quitado', p_filtro_status) > 0);
+END IF;
 
 -- PASSO 1: Tabela temporária base (1 scan da tabela original)
 DROP TEMPORARY TABLE IF EXISTS temp_base;
@@ -85,7 +114,8 @@ GROUP BY id_cliente, id_categoria;
 
 -- Índice
 ALTER TABLE temp_agregado
-ADD INDEX idx_agg (id_cliente, id_categoria);
+ADD INDEX idx_agg (id_cliente, id_categoria),
+ADD INDEX idx_status (Status);
 
 -- PASSO 3: Contagem de parcelas até atraso (otimizado)
 DROP TEMPORARY TABLE IF EXISTS temp_count_atraso;
@@ -127,7 +157,7 @@ GROUP BY b.id_cliente, b.id_categoria;
 ALTER TABLE temp_count_futuro
 ADD INDEX idx_cf (id_cliente, id_categoria);
 
--- PASSO 5: QUERY FINAL - Apenas JOINs, zero subconsultas!
+-- PASSO 5: QUERY FINAL COM FILTRO DE STATUS
 SELECT
   a.id_cliente,
   a.nome_cliente,
@@ -166,7 +196,23 @@ LEFT JOIN temp_count_atraso ca
 LEFT JOIN temp_count_futuro cf
   ON a.id_cliente = cf.id_cliente
   AND a.id_categoria = cf.id_categoria
-WHERE a.id_cliente IS NOT NULL;
+WHERE a.id_cliente IS NOT NULL
+  -- APLICAR FILTRO DE STATUS
+  AND (
+    -- Se não usar filtro, retorna tudo
+    v_usar_filtro = FALSE
+    OR
+    -- Se usar filtro, verifica cada status
+    (
+      (v_filtrar_atraso = TRUE AND a.Status = 'Atraso')
+      OR
+      (v_filtrar_aberto = TRUE AND a.Status = 'Aberto')
+      OR
+      (v_filtrar_ativo = TRUE AND a.Status = 'Ativo')
+      OR
+      (v_filtrar_quitado = TRUE AND a.Status = 'Quitado')
+    )
+  );
 
 -- PASSO 6: Limpar
 DROP TEMPORARY TABLE IF EXISTS temp_base;
@@ -174,17 +220,35 @@ DROP TEMPORARY TABLE IF EXISTS temp_agregado;
 DROP TEMPORARY TABLE IF EXISTS temp_count_atraso;
 DROP TEMPORARY TABLE IF EXISTS temp_count_futuro;
 
-END;
+END$$
+
+DELIMITER ;
 
 
 -- ============================================================
--- COMO ATUALIZAR A PROCEDURE NO BANCO:
+-- COMO INSTALAR NO BANCO:
 -- ============================================================
--- 1. Deletar a procedure antiga:
---    DROP PROCEDURE IF EXISTS dagiel67_central_mdzd.afs_receitas_consolidadas;
+-- 1. Execute TODO o código acima (incluindo DROP e CREATE)
 --
--- 2. Executar o código acima completo
+-- 2. Teste os filtros:
 --
--- 3. Testar:
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas();
+--    -- Todos os registros:
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada(NULL);
+--
+--    -- Apenas em Atraso:
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso');
+--
+--    -- Atraso ou Aberto:
+--    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso,Aberto');
+--
+-- ============================================================
+
+
+-- ============================================================
+-- VALORES DE STATUS POSSÍVEIS:
+-- ============================================================
+-- 'Atraso'   - Contratos com parcelas vencidas
+-- 'Aberto'   - Contratos com parcelas futuras, sem pagamentos
+-- 'Ativo'    - Contratos com parcelas futuras e já teve pagamentos
+-- 'Quitado'  - Contratos totalmente pagos
 -- ============================================================
