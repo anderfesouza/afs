@@ -1,27 +1,7 @@
 -- ============================================================
 -- STORED PROCEDURE: afs_receitas_consolidadas_filtrada
 -- ============================================================
--- Versão COM FILTROS de Status
--- Permite filtrar por: Atraso, Ativo, Aberto, Quitado
--- ============================================================
-
--- EXEMPLOS DE USO:
---
--- 1. Todos os registros (igual à versão sem filtros):
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada(NULL);
---
--- 2. Filtrar apenas Status "Atraso":
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso');
---
--- 3. Filtrar apenas Status "Aberto":
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Aberto');
---
--- 4. Filtrar múltiplos Status (Atraso OU Aberto):
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso,Aberto');
---
--- 5. Filtrar Ativo e Quitado:
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Ativo,Quitado');
---
+-- Versão COM FILTROS de Status + COLUNA COBRANCA
 -- ============================================================
 
 DROP PROCEDURE IF EXISTS dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada;
@@ -58,23 +38,27 @@ DROP TEMPORARY TABLE IF EXISTS temp_base;
 CREATE TEMPORARY TABLE temp_base
 ENGINE=MEMORY
 SELECT
-  id_cliente,
-  nome_cliente,
-  id_categoria,
-  nome_categoria,
-  metodo_pagamento,
-  DATE(data_criacao) AS data_compra,
-  DATE(vencimento) AS dt_venc,
-  COALESCE(nao_pago, 0) AS vl_nao_pago,
-  COALESCE(pago, 0) AS vl_pago,
-  COALESCE(bruto, 0) AS vl_total,
+  dagiel67_central_mdzd.ContaAzulReceitas.id_cliente,
+  dagiel67_central_mdzd.ContaAzulReceitas.nome_cliente,
+  dagiel67_central_mdzd.ContaAzulPessoas.email,
+  dagiel67_central_mdzd.ContaAzulPessoas.documento,
+  dagiel67_central_mdzd.ContaAzulPessoas.telefone,
+  dagiel67_central_mdzd.ContaAzulReceitas.id_categoria,
+  dagiel67_central_mdzd.ContaAzulReceitas.nome_categoria,
+  dagiel67_central_mdzd.ContaAzulReceitas.metodo_pagamento,
+  DATE(dagiel67_central_mdzd.ContaAzulReceitas.data_criacao) AS data_compra,
+  DATE(dagiel67_central_mdzd.ContaAzulReceitas.vencimento) AS dt_venc,
+  COALESCE(dagiel67_central_mdzd.ContaAzulReceitas.nao_pago, 0) AS vl_nao_pago,
+  COALESCE(dagiel67_central_mdzd.ContaAzulReceitas.pago, 0) AS vl_pago,
+  COALESCE(dagiel67_central_mdzd.ContaAzulReceitas.bruto, 0) AS vl_total,
   1 AS qtd_parcelas_contrato,
-  CASE WHEN status_traduzido = 'RECEBIDO' THEN 1 ELSE 0 END AS fl_paga,
-  CASE WHEN status_traduzido <> 'RECEBIDO' THEN 1 ELSE 0 END AS fl_pendente,
-  CASE WHEN status_traduzido <> 'RECEBIDO' AND DATE(vencimento) < CURDATE() THEN 1 ELSE 0 END AS fl_atrasada,
-  CASE WHEN status_traduzido <> 'RECEBIDO' AND DATE(vencimento) >= CURDATE() THEN 1 ELSE 0 END AS fl_futura
+  CASE WHEN dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido = 'RECEBIDO' THEN 1 ELSE 0 END AS fl_paga,
+  CASE WHEN dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido <> 'RECEBIDO' THEN 1 ELSE 0 END AS fl_pendente,
+  CASE WHEN dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido <> 'RECEBIDO' AND DATE(dagiel67_central_mdzd.ContaAzulReceitas.vencimento) < CURDATE() THEN 1 ELSE 0 END AS fl_atrasada,
+  CASE WHEN dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido <> 'RECEBIDO' AND DATE(dagiel67_central_mdzd.ContaAzulReceitas.vencimento) >= CURDATE() THEN 1 ELSE 0 END AS fl_futura
 FROM dagiel67_central_mdzd.ContaAzulReceitas
-WHERE (status_traduzido <> 'RENEGOCIADO' AND status_traduzido <> 'EXCLUIR');
+LEFT JOIN dagiel67_central_mdzd.ContaAzulPessoas ON dagiel67_central_mdzd.ContaAzulReceitas.id_cliente = dagiel67_central_mdzd.ContaAzulPessoas.id
+WHERE (dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido <> 'RENEGOCIADO' AND dagiel67_central_mdzd.ContaAzulReceitas.status_traduzido <> 'EXCLUIR');
 
 -- Índice
 ALTER TABLE temp_base
@@ -87,9 +71,12 @@ ENGINE=MEMORY
 SELECT
   id_cliente,
   MAX(nome_cliente) AS nome_cliente,
+  MAX(email) AS email,
+  MAX(documento) AS documento,
   id_categoria,
   MAX(nome_categoria) AS nome_categoria,
   MAX(metodo_pagamento) AS metodo_pagamento,
+  MAX(telefone) AS telefone,
   MIN(data_compra) AS Compra,
   SUM(vl_nao_pago) AS Aberto,
   SUM(vl_pago) AS Pago,
@@ -108,7 +95,9 @@ SELECT
   END AS Status,
   MIN(CASE WHEN fl_atrasada = 1 THEN dt_venc END) AS dt_atraso,
   MIN(CASE WHEN fl_futura = 1 THEN dt_venc END) AS dt_futuro,
-  MAX(dt_venc) AS dt_ultimo
+  MAX(dt_venc) AS dt_ultimo,
+  -- NOVA COLUNA: Primeira parcela pendente (para Cobrança)
+  MIN(CASE WHEN fl_pendente = 1 THEN dt_venc END) AS dt_primeira_pendente
 FROM temp_base
 GROUP BY id_cliente, id_categoria;
 
@@ -157,10 +146,13 @@ GROUP BY b.id_cliente, b.id_categoria;
 ALTER TABLE temp_count_futuro
 ADD INDEX idx_cf (id_cliente, id_categoria);
 
--- PASSO 5: QUERY FINAL COM FILTRO DE STATUS
+-- PASSO 5: QUERY FINAL COM FILTRO DE STATUS + COLUNA COBRANCA
 SELECT
   a.id_cliente,
   a.nome_cliente,
+  a.email,
+  a.documento,
+  a.telefone,
   a.id_categoria,
   a.nome_categoria,
   a.metodo_pagamento,
@@ -187,7 +179,15 @@ SELECT
     WHEN a.tem_atraso = 1 AND a.tem_futuro = 0 THEN a.dt_atraso
     WHEN a.tem_futuro = 1 AND a.tem_atraso = 0 THEN a.dt_futuro
     ELSE a.dt_ultimo
-  END AS Vencimento_Atual
+  END AS Vencimento_Atual,
+
+  -- NOVA COLUNA: Cobranca
+  -- Para Atraso, Aberto, Ativo: primeira parcela pendente
+  -- Para Quitado: última parcela
+  CASE
+    WHEN a.Status IN ('Atraso', 'Aberto', 'Ativo') THEN a.dt_primeira_pendente
+    ELSE a.dt_ultimo
+  END AS Cobranca
 
 FROM temp_agregado a
 LEFT JOIN temp_count_atraso ca
@@ -226,29 +226,21 @@ DELIMITER ;
 
 
 -- ============================================================
--- COMO INSTALAR NO BANCO:
+-- COMO USAR:
 -- ============================================================
--- 1. Execute TODO o código acima (incluindo DROP e CREATE)
+-- 1. Execute TODO o código acima para criar/atualizar a procedure
 --
--- 2. Teste os filtros:
---
---    -- Todos os registros:
+-- 2. Teste:
 --    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada(NULL);
 --
---    -- Apenas em Atraso:
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso');
+-- ============================================================
+-- NOVA COLUNA: Cobranca
+-- ============================================================
+-- A coluna Cobranca mostra:
+-- - Atraso: Data da primeira parcela vencida pendente
+-- - Aberto: Data da primeira parcela pendente (pode estar próxima)
+-- - Ativo: Data da próxima parcela pendente
+-- - Quitado: Data da última parcela (para referência)
 --
---    -- Atraso ou Aberto:
---    CALL dagiel67_central_mdzd.afs_receitas_consolidadas_filtrada('Atraso,Aberto');
---
--- ============================================================
-
-
--- ============================================================
--- VALORES DE STATUS POSSÍVEIS:
--- ============================================================
--- 'Atraso'   - Contratos com parcelas vencidas
--- 'Aberto'   - Contratos com parcelas futuras, sem pagamentos
--- 'Ativo'    - Contratos com parcelas futuras e já teve pagamentos
--- 'Quitado'  - Contratos totalmente pagos
+-- Essa é a data que deve ser usada para cobrança/follow-up!
 -- ============================================================

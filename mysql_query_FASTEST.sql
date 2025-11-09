@@ -79,7 +79,9 @@ SELECT
   END AS Status,
   MIN(CASE WHEN fl_atrasada = 1 THEN dt_venc END) AS dt_atraso,
   MIN(CASE WHEN fl_futura = 1 THEN dt_venc END) AS dt_futuro,
-  MAX(dt_venc) AS dt_ultimo
+  MAX(dt_venc) AS dt_ultimo,
+  -- NOVA COLUNA: Primeira parcela pendente (para Cobrança)
+  MIN(CASE WHEN fl_pendente = 1 THEN dt_venc END) AS dt_primeira_pendente
 FROM temp_base
 GROUP BY id_cliente, id_categoria;
 
@@ -157,7 +159,15 @@ SELECT
     WHEN a.tem_atraso = 1 AND a.tem_futuro = 0 THEN a.dt_atraso
     WHEN a.tem_futuro = 1 AND a.tem_atraso = 0 THEN a.dt_futuro
     ELSE a.dt_ultimo
-  END AS Vencimento_Atual
+  END AS Vencimento_Atual,
+
+  -- NOVA COLUNA: Cobranca
+  -- Para Atraso, Aberto, Ativo: primeira parcela pendente
+  -- Para Quitado: última parcela
+  CASE
+    WHEN a.Status IN ('Atraso', 'Aberto', 'Ativo') THEN a.dt_primeira_pendente
+    ELSE a.dt_ultimo
+  END AS Cobranca
 
 FROM temp_agregado a
 LEFT JOIN temp_count_atraso ca
@@ -187,4 +197,22 @@ END;
 --
 -- 3. Testar:
 --    CALL dagiel67_central_mdzd.afs_receitas_consolidadas();
+-- ============================================================
+
+
+-- ============================================================
+-- NOVA COLUNA: Cobranca
+-- ============================================================
+-- A coluna Cobranca mostra a data ideal para follow-up/cobrança:
+--
+-- - Atraso: Data da primeira parcela vencida pendente
+-- - Aberto: Data da primeira parcela pendente (geralmente recente)
+-- - Ativo: Data da próxima parcela pendente
+-- - Quitado: Data da última parcela (para referência)
+--
+-- Esta é a data que deve ser usada para:
+-- - Workflows de cobrança automatizados
+-- - Notificações de vencimento
+-- - Dashboards de follow-up
+-- - Ordenação por prioridade de cobrança
 -- ============================================================
