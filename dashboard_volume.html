@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Volume por País</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e4e4e7;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card.highlight {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .stat-change {
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+
+        .stat-change.positive { color: #4ade80; }
+        .stat-change.negative { color: #f87171; }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 24px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #e2e8f0;
+        }
+
+        .filter-section {
+            margin-bottom: 24px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #e4e4e7;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+        .search-input::placeholder {
+            color: #64748b;
+        }
+
+        .country-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .country-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .country-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+
+        .country-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .country-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+        }
+
+        .country-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .country-item.selected {
+            background: rgba(99, 102, 241, 0.3);
+        }
+
+        .country-item.dimmed {
+            opacity: 0.3;
+        }
+
+        .country-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .country-name {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .country-value {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #e4e4e7;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.active {
+            background: #6366f1;
+            border-color: #6366f1;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 8px;
+        }
+
+        .legend-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .legend-btn:hover, .legend-btn.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            color: #e4e4e7;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 500px;
+        }
+
+        .tooltip-custom {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            pointer-events: none;
+            z-index: 100;
+            min-width: 200px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .tooltip-title {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tooltip-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .tooltip-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+
+        .tooltip-label {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .tooltip-value {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .ranking-section {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+        }
+
+        .ranking-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .ranking-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ranking-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .ranking-item:last-child {
+            border-bottom: none;
+        }
+
+        .ranking-position {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-right: 12px;
+        }
+
+        .ranking-position.gold { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a2e; }
+        .ranking-position.silver { background: linear-gradient(135deg, #9ca3af, #6b7280); color: #1a1a2e; }
+        .ranking-position.bronze { background: linear-gradient(135deg, #d97706, #b45309); color: #1a1a2e; }
+        .ranking-position.normal { background: rgba(255, 255, 255, 0.1); }
+
+        .ranking-info {
+            flex: 1;
+        }
+
+        .ranking-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .ranking-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .ranking-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .ranking-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .ranking-change {
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: relative;
+                top: 0;
+            }
+
+            .country-list {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 8px;
+                max-height: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            .chart-wrapper { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dashboard de Volume por País</h1>
+            <p class="subtitle">Análise de Dez 2024 a Dez 2025 • Dados atualizados em tempo real</p>
+        </header>
+
+        <div class="stats-grid" id="statsGrid">
+            <!-- Preenchido via JS -->
+        </div>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <div class="filter-section">
+                    <h3>🔍 Filtrar Países</h3>
+                    <input type="text" class="search-input" id="searchInput" placeholder="Buscar país...">
+                    <div class="btn-group">
+                        <button class="btn active" id="btnAll">Todos</button>
+                        <button class="btn" id="btnTop5">Top 5</button>
+                        <button class="btn" id="btnClear">Limpar</button>
+                    </div>
+                </div>
+
+                <div class="filter-section">
+                    <h3>📊 Países</h3>
+                    <div class="country-list" id="countryList">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+            </aside>
+
+            <main class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">Evolução do Volume ao Longo do Tempo</h2>
+                    <div class="chart-legend">
+                        <button class="legend-btn active" data-scale="linear">Linear</button>
+                        <button class="legend-btn" data-scale="logarithmic">Logarítmico</button>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </main>
+        </div>
+
+        <div class="ranking-section">
+            <div class="ranking-card">
+                <h3>🏆 Maiores Volumes (Atual)</h3>
+                <div id="topRanking"></div>
+            </div>
+            <div class="ranking-card">
+                <h3>📉 Maiores Quedas (%)</h3>
+                <div id="dropRanking"></div>
+            </div>
+            <div class="ranking-card">
+                <h3>📈 Mais Estáveis</h3>
+                <div id="stableRanking"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dados
+        const dates = ['01/12/2024', '02/12/2024', '16/01/2025', '25/01/2025', '23/04/2025',
+                       '24/06/2025', '19/07/2025', '26/08/2025', '07/10/2025', '05/12/2025'];
+
+        const data = {
+            'Alemanha':    [949, 771, 762, 734, 776, 740, 690, 680, 675, 656],
+            'Áustria':     [69, 60, 57, 55, 64, 58, 57, 55, 55, 51],
+            'Bélgica':     [131, 106, 107, 106, 102, 91, 84, 83, 83, 74],
+            'Croácia':     [10, 10, 10, 10, 9, 9, 9, 9, 9, 10],
+            'Dinamarca':   [52, 47, 45, 45, 46, 39, 40, 39, 40, 38],
+            'EAU':         [10, 10, 10, 10, 10, 9, 10, 9, 10, 11],
+            'Espanha':     [382, 303, 292, 291, 325, 305, 288, 286, 277, 272],
+            'Estônia':     [9, 9, 9, 9, 9, 9, 9, 9, 9, 10],
+            'EUA e Canadá':[43, 34, 35, 34, 32, 30, 23, 30, 29, 30],
+            'Finlândia':   [26, 23, 22, 22, 21, 19, 19, 20, 23, 24],
+            'França':      [288, 231, 216, 216, 232, 218, 205, 206, 204, 202],
+            'Holanda':     [158, 126, 120, 118, 122, 111, 101, 100, 100, 97],
+            'Hungria':     [16, 16, 17, 17, 16, 15, 13, 14, 14, 14],
+            'Irlanda':     [392, 322, 352, 347, 384, 349, 333, 325, 323, 300],
+            'Itália':      [309, 254, 256, 252, 261, 243, 231, 223, 219, 213],
+            'Luxemburgo':  [48, 38, 37, 36, 39, 37, 34, 30, 28, 28],
+            'Noruega':     [39, 32, 34, 34, 35, 31, 32, 29, 31, 32],
+            'Polônia':     [12, 12, 13, 13, 13, 13, 12, 11, 14, 13],
+            'Portugal':    [620, 495, 466, 453, 448, 426, 402, 376, 375, 377],
+            'Reino Unido': [571, 465, 455, 451, 498, 475, 453, 449, 447, 421],
+            'Suécia':      [97, 83, 88, 88, 99, 92, 89, 91, 92, 88],
+            'Suíça':       [200, 172, 164, 161, 171, 157, 141, 145, 141, 138]
+        };
+
+        // Cores vibrantes e distintas
+        const colors = {
+            'Alemanha':    '#FF6B6B',
+            'Áustria':     '#4ECDC4',
+            'Bélgica':     '#45B7D1',
+            'Croácia':     '#96CEB4',
+            'Dinamarca':   '#FFEAA7',
+            'EAU':         '#DDA0DD',
+            'Espanha':     '#FF8C42',
+            'Estônia':     '#98D8C8',
+            'EUA e Canadá':'#7B68EE',
+            'Finlândia':   '#87CEEB',
+            'França':      '#6C5CE7',
+            'Holanda':     '#FF7675',
+            'Hungria':     '#74B9FF',
+            'Irlanda':     '#00B894',
+            'Itália':      '#E17055',
+            'Luxemburgo':  '#FDCB6E',
+            'Noruega':     '#81ECEC',
+            'Polônia':     '#FD79A8',
+            'Portugal':    '#00CEC9',
+            'Reino Unido': '#A29BFE',
+            'Suécia':      '#55A3FF',
+            'Suíça':       '#FF85A2'
+        };
+
+        // Estado
+        let selectedCountries = new Set(Object.keys(data));
+        let chart = null;
+        let currentScale = 'linear';
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            renderStats();
+            renderCountryList();
+            initChart();
+            renderRankings();
+            setupEventListeners();
+        });
+
+        function renderStats() {
+            const countries = Object.keys(data);
+            const totalAtual = countries.reduce((sum, c) => sum + data[c][9], 0);
+            const totalInicial = countries.reduce((sum, c) => sum + data[c][0], 0);
+            const variacaoTotal = ((totalAtual - totalInicial) / totalInicial * 100).toFixed(1);
+
+            const topPais = countries.reduce((a, b) => data[a][9] > data[b][9] ? a : b);
+            const maiorQueda = countries.reduce((a, b) => {
+                const quedaA = (data[a][0] - data[a][9]) / data[a][0] * 100;
+                const quedaB = (data[b][0] - data[b][9]) / data[b][0] * 100;
+                return quedaA > quedaB ? a : b;
+            });
+
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card highlight">
+                    <div class="stat-label">Volume Total Atual</div>
+                    <div class="stat-value">${totalAtual.toLocaleString('pt-BR')}</div>
+                    <div class="stat-change ${variacaoTotal < 0 ? 'negative' : 'positive'}">
+                        ${variacaoTotal > 0 ? '↑' : '↓'} ${Math.abs(variacaoTotal)}% desde Dez/24
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Maior Volume</div>
+                    <div class="stat-value">${data[topPais][9].toLocaleString('pt-BR')}</div>
+                    <div class="stat-change" style="color: ${colors[topPais]}">${topPais}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Países Monitorados</div>
+                    <div class="stat-value">${countries.length}</div>
+                    <div class="stat-change">Regiões ativas</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Maior Redução</div>
+                    <div class="stat-value">${((data[maiorQueda][0] - data[maiorQueda][9]) / data[maiorQueda][0] * 100).toFixed(0)}%</div>
+                    <div class="stat-change negative">${maiorQueda}</div>
+                </div>
+            `;
+        }
+
+        function renderCountryList() {
+            const list = document.getElementById('countryList');
+            const sortedCountries = Object.keys(data).sort((a, b) => data[b][9] - data[a][9]);
+
+            list.innerHTML = sortedCountries.map(country => `
+                <div class="country-item ${selectedCountries.has(country) ? 'selected' : 'dimmed'}" data-country="${country}">
+                    <div class="country-color" style="background: ${colors[country]}"></div>
+                    <span class="country-name">${country}</span>
+                    <span class="country-value">${data[country][9]}</span>
+                </div>
+            `).join('');
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+
+            const datasets = Object.keys(data).map(country => ({
+                label: country,
+                data: data[country],
+                borderColor: colors[country],
+                backgroundColor: colors[country] + '20',
+                borderWidth: selectedCountries.has(country) ? 3 : 1,
+                pointRadius: selectedCountries.has(country) ? 4 : 2,
+                pointHoverRadius: 8,
+                tension: 0.3,
+                hidden: !selectedCountries.has(country),
+                fill: false
+            }));
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#e4e4e7',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            padding: 16,
+                            cornerRadius: 12,
+                            displayColors: true,
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            boxPadding: 4,
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.dataset.label}: ${context.parsed.y.toLocaleString('pt-BR')}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: { size: 11 }
+                            }
+                        },
+                        y: {
+                            type: currentScale,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: { size: 11 },
+                                callback: function(value) {
+                                    return value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart() {
+            chart.data.datasets.forEach((dataset, index) => {
+                const country = dataset.label;
+                const isSelected = selectedCountries.has(country);
+                dataset.hidden = !isSelected;
+                dataset.borderWidth = isSelected && selectedCountries.size <= 5 ? 3 : 2;
+                dataset.pointRadius = isSelected && selectedCountries.size <= 5 ? 5 : 3;
+            });
+            chart.update();
+            renderCountryList();
+        }
+
+        function renderRankings() {
+            const countries = Object.keys(data);
+
+            // Top por volume atual
+            const topByVolume = countries
+                .map(c => ({ name: c, value: data[c][9], color: colors[c] }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 5);
+
+            const maxVolume = topByVolume[0].value;
+            document.getElementById('topRanking').innerHTML = topByVolume.map((item, i) => `
+                <div class="ranking-item">
+                    <div class="ranking-position ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal'}">${i + 1}</div>
+                    <div class="ranking-info">
+                        <div class="ranking-name">${item.name}</div>
+                        <div class="ranking-bar">
+                            <div class="ranking-bar-fill" style="width: ${item.value / maxVolume * 100}%; background: ${item.color}"></div>
+                        </div>
+                    </div>
+                    <div class="ranking-value">${item.value.toLocaleString('pt-BR')}</div>
+                </div>
+            `).join('');
+
+            // Maiores quedas
+            const drops = countries
+                .map(c => ({
+                    name: c,
+                    drop: ((data[c][0] - data[c][9]) / data[c][0] * 100),
+                    color: colors[c]
+                }))
+                .sort((a, b) => b.drop - a.drop)
+                .slice(0, 5);
+
+            const maxDrop = drops[0].drop;
+            document.getElementById('dropRanking').innerHTML = drops.map((item, i) => `
+                <div class="ranking-item">
+                    <div class="ranking-position ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal'}">${i + 1}</div>
+                    <div class="ranking-info">
+                        <div class="ranking-name">${item.name}</div>
+                        <div class="ranking-bar">
+                            <div class="ranking-bar-fill" style="width: ${item.drop / maxDrop * 100}%; background: ${item.color}"></div>
+                        </div>
+                    </div>
+                    <div class="ranking-value" style="color: #f87171">-${item.drop.toFixed(1)}%</div>
+                </div>
+            `).join('');
+
+            // Mais estáveis (menor variação)
+            const stable = countries
+                .map(c => {
+                    const values = data[c];
+                    const avg = values.reduce((a, b) => a + b) / values.length;
+                    const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+                    const cv = (Math.sqrt(variance) / avg * 100); // Coeficiente de variação
+                    return { name: c, cv: cv, color: colors[c] };
+                })
+                .sort((a, b) => a.cv - b.cv)
+                .slice(0, 5);
+
+            const maxCV = stable[stable.length - 1].cv;
+            document.getElementById('stableRanking').innerHTML = stable.map((item, i) => `
+                <div class="ranking-item">
+                    <div class="ranking-position ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal'}">${i + 1}</div>
+                    <div class="ranking-info">
+                        <div class="ranking-name">${item.name}</div>
+                        <div class="ranking-bar">
+                            <div class="ranking-bar-fill" style="width: ${(1 - item.cv / maxCV) * 100 + 20}%; background: ${item.color}"></div>
+                        </div>
+                    </div>
+                    <div class="ranking-value" style="color: #4ade80">±${item.cv.toFixed(1)}%</div>
+                </div>
+            `).join('');
+        }
+
+        function setupEventListeners() {
+            // Click nos países
+            document.getElementById('countryList').addEventListener('click', (e) => {
+                const item = e.target.closest('.country-item');
+                if (!item) return;
+
+                const country = item.dataset.country;
+                if (selectedCountries.has(country)) {
+                    if (selectedCountries.size > 1) {
+                        selectedCountries.delete(country);
+                    }
+                } else {
+                    selectedCountries.add(country);
+                }
+                updateChart();
+            });
+
+            // Botões de filtro
+            document.getElementById('btnAll').addEventListener('click', () => {
+                selectedCountries = new Set(Object.keys(data));
+                updateChart();
+                setActiveBtn('btnAll');
+            });
+
+            document.getElementById('btnTop5').addEventListener('click', () => {
+                const top5 = Object.keys(data)
+                    .sort((a, b) => data[b][9] - data[a][9])
+                    .slice(0, 5);
+                selectedCountries = new Set(top5);
+                updateChart();
+                setActiveBtn('btnTop5');
+            });
+
+            document.getElementById('btnClear').addEventListener('click', () => {
+                const first = Object.keys(data)[0];
+                selectedCountries = new Set([first]);
+                updateChart();
+                setActiveBtn('btnClear');
+            });
+
+            // Busca
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const search = e.target.value.toLowerCase();
+                document.querySelectorAll('.country-item').forEach(item => {
+                    const name = item.dataset.country.toLowerCase();
+                    item.style.display = name.includes(search) ? 'flex' : 'none';
+                });
+            });
+
+            // Escala do gráfico
+            document.querySelectorAll('.legend-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.legend-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentScale = btn.dataset.scale;
+                    chart.options.scales.y.type = currentScale;
+                    chart.update();
+                });
+            });
+        }
+
+        function setActiveBtn(id) {
+            document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+    </script>
+</body>
+</html>
